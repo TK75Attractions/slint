@@ -217,6 +217,9 @@ pub struct CompilerConfiguration {
     /// live-reload runtime to indicate that the `.slint` file is being previewed rather than
     /// driven by real host application logic.
     pub is_preview: bool,
+    
+    /// Custom attributes to apply to generated types.
+    pub attributes: Vec<(Rc<dyn Fn(String) -> bool>, String)>,
 }
 
 impl CompilerConfiguration {
@@ -340,6 +343,7 @@ impl CompilerConfiguration {
             #[cfg(feature = "slint-sc")]
             slint_sc,
             is_preview: false,
+            attributes: Default::default(),
         }
     }
 }
