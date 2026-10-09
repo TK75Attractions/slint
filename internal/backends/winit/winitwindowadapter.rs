@@ -814,28 +814,28 @@ impl WinitWindowAdapter {
     }
 
     pub(crate) fn suspend(&self) -> Result<(), PlatformError> {
-        let mut winit_window_or_none = self.winit_window_or_none.borrow_mut();
-        match *winit_window_or_none {
-            WinitWindowOrNone::HasWindow { ref window, .. } => {
-                self.renderer().suspend()?;
-
-                let last_window_rc = window.clone();
-
-                let mut attributes = Self::window_attributes().unwrap_or_default();
-                attributes.inner_size = Some(physical_size_to_winit(self.size.get()).into());
-                attributes.position = last_window_rc.outer_position().ok().map(|pos| pos.into());
-                *winit_window_or_none = WinitWindowOrNone::None(attributes.into());
-
-                // Note: Don't register the window in inactive_windows for re-creation later, as creating the window
-                // on wayland implies making it visible. Unfortunately, winit won't allow creating a window on wayland
-                // that's not visible.
-                self.shared_backend_data.watch_hidden_window(&last_window_rc);
-                self.shared_backend_data.unregister_window(Some(last_window_rc.id()));
-            }
-            WinitWindowOrNone::None(ref attributes) => {
+        let last_window_rc = match &*self.winit_window_or_none.borrow() {
+            WinitWindowOrNone::HasWindow { window, .. } => window.clone(),
+            WinitWindowOrNone::None(attributes) => {
                 attributes.borrow_mut().visible = false;
+                return Ok(());
             }
-        }
+        };
+
+        // Not borrowed here: a rendering notifier can set a property on teardown,
+        // and the redraw that requests borrows `winit_window_or_none`.
+        self.renderer().suspend()?;
+
+        let mut attributes = Self::window_attributes().unwrap_or_default();
+        attributes.inner_size = Some(physical_size_to_winit(self.size.get()).into());
+        attributes.position = last_window_rc.outer_position().ok().map(|pos| pos.into());
+        *self.winit_window_or_none.borrow_mut() = WinitWindowOrNone::None(attributes.into());
+
+        // Note: Don't register the window in inactive_windows for re-creation later, as creating the window
+        // on wayland implies making it visible. Unfortunately, winit won't allow creating a window on wayland
+        // that's not visible.
+        self.shared_backend_data.watch_hidden_window(&last_window_rc);
+        self.shared_backend_data.unregister_window(Some(last_window_rc.id()));
 
         Ok(())
     }
@@ -877,6 +877,9 @@ impl WinitWindowAdapter {
         }
 
         self.pending_redraw.set(false);
+
+        #[cfg(target_os = "windows")]
+        self.mark_windows_update_region_dirty();
 
         if let Some(winit_window) = self.winit_window_or_none.borrow().as_window() {
             // on macOS we sometimes don't get a resize event after calling
@@ -1160,6 +1163,36 @@ impl WinitWindowAdapter {
     #[cfg(target_os = "ios")]
     pub fn set_platform_default_font_size(&self, size: i_slint_core::lengths::LogicalLength) {
         WindowInner::from_pub(self.window()).context().set_platform_default_font_size(Some(size));
+    }
+
+    /// Windows invalidates what a window shows when its scale factor changes, which the buffer
+    /// age a software surface reports doesn't account for. winit hands over the redraw before it
+    /// validates the region, so it can still be read here.
+    #[cfg(target_os = "windows")]
+    fn mark_windows_update_region_dirty(&self) {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows::Win32::Foundation::{HWND, RECT};
+        use windows::Win32::Graphics::Gdi::GetUpdateRect;
+
+        let Some(winit_window) = self.winit_window_or_none.borrow().as_window() else { return };
+        let Ok(window_handle) = winit_window.window_handle() else { return };
+        let RawWindowHandle::Win32(win32_handle) = window_handle.as_raw() else { return };
+        let hwnd = HWND(win32_handle.hwnd.get() as *mut core::ffi::c_void);
+
+        let mut update_rect = RECT::default();
+        if !unsafe { GetUpdateRect(hwnd, Some(&mut update_rect), false) }.as_bool() {
+            return;
+        }
+
+        let physical_rect = euclid::Box2D::<i32, PhysicalPx>::new(
+            euclid::point2(update_rect.left, update_rect.top),
+            euclid::point2(update_rect.right, update_rect.bottom),
+        )
+        .to_rect()
+        .cast::<Coord>();
+        let logical_rect: LogicalRect =
+            physical_rect / ScaleFactor::new(self.window().scale_factor());
+        self.renderer().as_core_renderer().mark_dirty_region(logical_rect.into());
     }
 
     pub fn window_state_event(&self) {
@@ -1573,6 +1606,8 @@ impl WinitWindowAdapter {
                         id: finger_id,
                         position,
                         phase: winit_touch_phase(touch.phase),
+                        event_time: None,
+                        history: Default::default(),
                     });
                 }
             }
@@ -1987,8 +2022,6 @@ impl WindowAdapter for WinitWindowAdapter {
                     size: i_slint_core::api::LogicalSize::new(width, height),
                 })
                 .unwrap();
-            WindowInner::from_pub(self.window())
-                .set_window_item_safe_area(window_item.safe_area_insets());
         }
 
         let m = properties.is_fullscreen();

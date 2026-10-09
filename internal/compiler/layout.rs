@@ -6,7 +6,7 @@
 use crate::diagnostics::{BuildDiagnostics, DiagnosticLevel, Spanned};
 use crate::expression_tree::*;
 use crate::langtype::{ElementType, PropertyLookupMode, PropertyLookupResult, Type};
-use crate::object_tree::{Component, Element, ElementRc};
+use crate::object_tree::{Component, Element, ElementRc, PropertyDeclaration};
 
 use smol_str::{SmolStr, ToSmolStr};
 
@@ -1062,7 +1062,8 @@ pub fn create_new_prop(elem: &ElementRc, tentative_name: SmolStr, ty: Type) -> N
     } else {
         tentative_name
     };
-    e.property_declarations.insert(name.clone(), ty.into());
+    e.property_declarations
+        .insert(name.clone(), PropertyDeclaration { synthesized: true, ..ty.into() });
     drop(e);
     NamedReference::new(elem, name)
 }
@@ -1166,12 +1167,6 @@ pub fn repeated_element_layout_info(
         cross_alignment: None,
         is_synthesized_repeated_merge: true,
     };
-    // KNOWN LIMITATION: a height-for-width instance — a word-wrapped `Text`, say —
-    // is measured unconstrained rather than at the size it is given, so it can
-    // under-report its cross size. That needs a known cross size here, the way a
-    // real enclosing layout threads one through `repeated_cross_size`; no single
-    // such value exists in the outer scope, where the instance's own width does
-    // not yet exist.
     Expression::ComputeBoxLayoutInfo { layout, orientation, cross_axis_size: None }
 }
 

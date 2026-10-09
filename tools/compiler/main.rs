@@ -6,6 +6,7 @@
 
 use clap::{Parser, ValueEnum};
 use i_slint_compiler::diagnostics::BuildDiagnostics;
+use i_slint_compiler::generator::OutputFormat;
 use i_slint_compiler::*;
 use itertools::Itertools;
 use std::io::Cursor;
@@ -236,6 +237,16 @@ fn main() -> std::io::Result<()> {
         }
     }
 
+    #[cfg(feature = "typescript")]
+    if format == generator::OutputFormat::TypeScript
+        && let Some(name) = args.output.file_name().and_then(|n| n.to_str())
+        && name != "-"
+        && !name.ends_with(".d.ts")
+    {
+        eprintln!("The TypeScript output is a declaration file: name it '{name}.d.ts'");
+        std::process::exit(1);
+    }
+
     let mut compiler_config = CompilerConfiguration::new(format.clone());
     #[cfg(feature = "slint-sc")]
     {
@@ -267,6 +278,7 @@ fn main() -> std::io::Result<()> {
         };
     }
 
+    compiler_config.debug_info |= format == OutputFormat::Llr;
     compiler_config.include_paths = args.include_paths;
     compiler_config.library_paths = args
         .library_paths
@@ -308,20 +320,17 @@ fn main() -> std::io::Result<()> {
     if let Some(depfile) = args.depfile {
         let mut cursor = Cursor::new(Vec::new());
         write!(cursor, "{}: {}", args.output.display(), args.path.display())?;
-        for x in &diag.all_loaded_files {
+        for x in diag.all_loaded_files.iter().filter_map(|p| p.as_native_path()) {
             if x.is_absolute() {
                 write!(cursor, " {}", x.display())?;
             }
         }
         // A variable font is stored once per weight, so dedupe here.
         let embedded = doc.embedded_file_resources.borrow();
-        let resources: std::collections::BTreeSet<&str> = embedded
-            .iter()
-            .filter_map(|er| er.path.as_deref())
-            .filter(|resource| !resource.starts_with("builtin:/"))
-            .collect();
+        let resources: std::collections::BTreeSet<&std::path::Path> =
+            embedded.iter().filter_map(|er| er.path.as_ref()?.as_native_path()).collect();
         for resource in resources {
-            write!(cursor, " {resource}")?;
+            write!(cursor, " {}", resource.display())?;
         }
         writeln!(cursor)?;
         fileaccess::write_file_if_changed(&depfile, &cursor.into_inner())?;

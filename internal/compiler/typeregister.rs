@@ -61,7 +61,11 @@ macro_rules! declare_enums {
         }
         impl BuiltinEnums {
             fn new() -> Self {
-                Self { $($Name: enumeration(stringify!($Name), &[$(stringify!($Value)),*])),* }
+                Self { $($Name: enumeration(
+                    stringify!($Name),
+                    &[$(stringify!($Value)),*],
+                    stringify!($vis) == "pub",
+                )),* }
             }
             fn all(&self) -> impl Iterator<Item = &Arc<Enumeration>> {
                 [$(&self.$Name),*].into_iter()
@@ -79,9 +83,10 @@ macro_rules! declare_enums {
 
 i_slint_common::for_each_enums!(declare_enums);
 
-fn enumeration(name: &str, values: &[&str]) -> Arc<Enumeration> {
+fn enumeration(name: &str, values: &[&str], public: bool) -> Arc<Enumeration> {
     Arc::new(Enumeration {
         name: name.into(),
+        public,
         values: values
             .iter()
             .map(|v| crate::generator::to_kebab_case(v.trim_start_matches("r#")).into())
@@ -337,16 +342,6 @@ pub fn reserved_properties() -> impl Iterator<Item = (&'static str, Type, Proper
             ("absolute-position", logical_point_type().into(), PropertyVisibility::Output),
             ("forward-focus", Type::ElementReference, PropertyVisibility::Constexpr),
             (
-                "focus",
-                Type::Function(BuiltinFunction::SetFocusItem.ty()),
-                PropertyVisibility::Public,
-            ),
-            (
-                "clear-focus",
-                Type::Function(BuiltinFunction::ClearFocusItem.ty()),
-                PropertyVisibility::Public,
-            ),
-            (
                 "dialog-button-role",
                 Type::Enumeration(BUILTIN.enums.DialogButtonRole.clone()),
                 PropertyVisibility::Constexpr,
@@ -368,6 +363,7 @@ pub fn reserved_properties() -> impl Iterator<Item = (&'static str, Type, Proper
             ),
         ]))
         .chain(std::iter::once(("init", noarg_callback_type(), PropertyVisibility::Private)))
+        .chain(reserved_member_functions().map(|(name, f, v)| (name, Type::Function(f.ty()), v)))
 }
 
 /// lookup reserved property injected in every item
@@ -424,12 +420,17 @@ pub fn reserved_property(name: std::borrow::Cow<'_, str>) -> PropertyLookupResul
     PropertyLookupResult::invalid(name)
 }
 
+pub fn reserved_member_functions()
+-> impl Iterator<Item = (&'static str, BuiltinFunction, PropertyVisibility)> {
+    IntoIterator::into_iter([
+        ("focus", BuiltinFunction::SetFocusItem, PropertyVisibility::Public), // match for callable "focus" property
+        ("clear-focus", BuiltinFunction::ClearFocusItem, PropertyVisibility::Public), // match for callable "clear-focus" property
+    ])
+}
+
 /// These member functions are injected in every time
 pub fn reserved_member_function(name: &str) -> Option<BuiltinFunction> {
-    for (m, e) in [
-        ("focus", BuiltinFunction::SetFocusItem), // match for callable "focus" property
-        ("clear-focus", BuiltinFunction::ClearFocusItem), // match for callable "clear-focus" property
-    ] {
+    for (m, e, _) in reserved_member_functions() {
         if m == name {
             return Some(e);
         }
@@ -491,6 +492,13 @@ impl TypeRegister {
     }
 
     fn builtin_internal() -> Self {
+        let mut register = Self::with_builtin_types();
+        crate::builtin_elements::load(&mut register);
+        register
+    }
+
+    /// A register with the basic types, the builtin structs and enums, but no elements.
+    pub(crate) fn with_builtin_types() -> Self {
         let mut register = TypeRegister::default();
 
         register.insert_type(Type::Float32);
@@ -537,8 +545,6 @@ impl TypeRegister {
             )* };
         }
         i_slint_common::for_each_builtin_structs!(register_builtin_structs);
-
-        crate::builtin_elements::load(&mut register);
 
         register
     }
@@ -642,7 +648,7 @@ impl TypeRegister {
         self.elements.insert(name, ElementType::Component(comp)).is_none()
     }
 
-    pub fn add_builtin(&mut self, builtin: Rc<BuiltinElement>) {
+    pub fn add_builtin(&mut self, builtin: Arc<BuiltinElement>) {
         self.elements.insert(builtin.name.clone(), ElementType::Builtin(builtin));
     }
 

@@ -308,7 +308,11 @@ fn compile_and_generate(
         .collect::<std::collections::HashMap<_, _>>();
 
     let mut diag = BuildDiagnostics::default();
-    let syntax_node = parser::parse(source.to_owned(), Some(&testcase.absolute_path), &mut diag);
+    let syntax_node = parser::parse(
+        source.to_owned(),
+        Some(source_path::SourcePath::new(&testcase.absolute_path)),
+        &mut diag,
+    );
     let mut compiler_config = CompilerConfiguration::new(generator::OutputFormat::Rust);
     compiler_config.enable_experimental = true;
     compiler_config.include_paths = include_paths;
@@ -320,6 +324,9 @@ fn compile_and_generate(
             Some(testcase.absolute_path.parent().unwrap().to_path_buf());
         compiler_config.translation_domain =
             Some(testcase.absolute_path.file_stem().unwrap().to_str().unwrap().to_string());
+    }
+    if source.contains("//embed-textures") {
+        compiler_config.embed_resources = EmbedResourcesKind::EmbedTextures;
     }
     if source.contains("//no-default-translation-context") {
         compiler_config.default_translation_context =

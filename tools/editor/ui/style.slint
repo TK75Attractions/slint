@@ -46,7 +46,10 @@ export struct ShellStyle {
 export struct PanesStyle {
     left-width: length = 286px,
     inspector-width: length = 232px,
+    maximum-width: length = 480px,
+    canvas-minimum-width: length = 400px,
     splitter-size: length = 6px,
+    resize-hit-size: length = 12px,
     minimum: length = 120px,
     component-height: length = 360px,
     image-height: length = 540px,
@@ -392,7 +395,6 @@ export struct TreeStyle {
     guide-width: length,
     drop-background: color,
     drop-border-width: length,
-    drop-line-height: length,
     root-drop-height: length,
     rename: PaintStyle,
 }
@@ -434,9 +436,7 @@ export struct FillPickerStyle {
     width: length = 260px,
     gap: length,
     margin: length,
-    min-height: length = 200px,
     shadow: ShadowStyle,
-    close-width: length = 48px,
     background: brush,
     border: brush,
     radius: length,
@@ -510,11 +510,6 @@ export struct ColorSliderStyle {
     radius: length,
 }
 
-export struct ColorHexStyle {
-    width: length = 78px,
-    input-width: length = 58px,
-}
-
 export struct GradientRampStyle {
     height: length,
     inset: length,
@@ -524,9 +519,7 @@ export struct GradientRampStyle {
 export struct GradientStopRowStyle {
     action-width: length = 24px,
     position-width: length = 66px,
-    opacity-width: length = 48px,
     height: length = 28px,
-    swatch-size: length = 14px,
 }
 
 export struct InfoIconStyle {
@@ -558,6 +551,7 @@ export struct FieldAppearance {
     disabled: PaintStyle,
     muted: color,
     selection: color,
+    selection-foreground: color,
 }
 
 export struct FieldStyle {
@@ -594,7 +588,6 @@ export struct SidebarToggleStyle {
 export struct ColorControlsStyle {
     plane: ColorPlaneStyle,
     slider: ColorSliderStyle,
-    hex: ColorHexStyle,
     row-height: length,
     gap: length,
 }
@@ -636,8 +629,11 @@ export struct CornerEditorStyle {
 }
 
 export struct ColorFieldStyle {
-    decorative: color,
+    checker: TransparencyGridStyle,
+    divider: color,
     field: FieldStyle,
+    opacity-width: length = 52px,
+    swatch-size: length = 16px,
     swatch-border: color,
 }
 
@@ -655,6 +651,7 @@ export struct ColorPalette {
     subtle-selection: color,
     focus-background: color,
     text-selection: color,
+    text-selection-foreground: color,
     on-accent: color,
     danger: color,
 }
@@ -758,6 +755,7 @@ export global Metrics {
     out property <length> control-small: 28px;
     out property <length> control-medium: 32px;
     out property <length> control-large: 36px;
+    out property <length> outline-row-height: 26px;
     out property <length> icon-medium: 16px;
     out property <length> icon-small: 12px;
     out property <length> icon-large: 18px;
@@ -798,7 +796,8 @@ export global LightTheme {
         selection: root.accent.with-alpha(0.14),
         subtle-selection: root.accent.with-alpha(0.10),
         focus-background: root.accent.with-alpha(0.12),
-        text-selection: root.accent.with-alpha(0.28),
+        text-selection: #2563eb,
+        text-selection-foreground: #ffffff,
         on-accent: #ffffff,
         danger: #cf222e,
     };
@@ -1018,6 +1017,7 @@ export global LightTheme {
         disabled: { background: LightTheme.colors.subtle, foreground: LightTheme.colors.muted, border: LightTheme.colors.border },
         muted: LightTheme.colors.muted,
         selection: LightTheme.colors.text-selection,
+        selection-foreground: LightTheme.colors.text-selection-foreground,
     };
 
     out property <FieldAppearance> inspector-field: {
@@ -1027,6 +1027,7 @@ export global LightTheme {
         disabled: { background: ( #f5f5f5).with-alpha(0.65), foreground: LightTheme.colors.muted, border: #d9d9d9},
         muted: LightTheme.colors.muted,
         selection: LightTheme.colors.text-selection,
+        selection-foreground: LightTheme.colors.text-selection-foreground,
     };
 
     out property <SegmentStyle> segment: {
@@ -1062,7 +1063,7 @@ export global LightTheme {
     };
 
     out property <ColorFieldStyle> color-field: {
-        decorative: LightTheme.colors.muted.with-alpha(0.35),
+        divider: LightTheme.colors.subtle-border,
         swatch-border: LightTheme.colors.muted,
     };
 }
@@ -1083,7 +1084,8 @@ export global DarkTheme {
         selection: root.accent.with-alpha(0.14),
         subtle-selection: root.accent.with-alpha(0.10),
         focus-background: root.accent.with-alpha(0.12),
-        text-selection: root.accent.with-alpha(0.28),
+        text-selection: #93c5fd,
+        text-selection-foreground: #111827,
         on-accent: #ffffff,
         danger: #ff7b72,
     };
@@ -1303,6 +1305,7 @@ export global DarkTheme {
         disabled: { background: DarkTheme.colors.subtle, foreground: DarkTheme.colors.muted, border: DarkTheme.colors.border },
         muted: DarkTheme.colors.muted,
         selection: DarkTheme.colors.text-selection,
+        selection-foreground: DarkTheme.colors.text-selection-foreground,
     };
 
     out property <FieldAppearance> inspector-field: {
@@ -1312,6 +1315,7 @@ export global DarkTheme {
         disabled: { background: ( #383838).with-alpha(0.65), foreground: DarkTheme.colors.muted, border: #4b4b4b},
         muted: DarkTheme.colors.muted,
         selection: DarkTheme.colors.text-selection,
+        selection-foreground: DarkTheme.colors.text-selection-foreground,
     };
 
     out property <SegmentStyle> segment: {
@@ -1347,7 +1351,7 @@ export global DarkTheme {
     };
 
     out property <ColorFieldStyle> color-field: {
-        decorative: DarkTheme.colors.muted.with-alpha(0.35),
+        divider: DarkTheme.colors.subtle-border,
         swatch-border: DarkTheme.colors.muted,
     };
 }
@@ -1813,7 +1817,6 @@ export global Style {
         selected-guide: Theme.navigation.selected-guide,
         file-guide: Theme.navigation.file-guide,
         drop-border-width: Metrics.border-width,
-        drop-line-height: Metrics.focus-width,
         root-drop-height: Metrics.space-regular,
         drop-background: Theme.navigation.drop-background,
         rename: { background: Palette.control-background, border: Palette.border },
@@ -1983,7 +1986,10 @@ export global Style {
 
     out property <ColorFieldStyle> color-field: {
         field: root.inspector-field,
-        decorative: Theme.fields.color-field.decorative,
+        checker: root.transparency-grid,
+        divider: Theme.fields.color-field.divider,
+        opacity-width: Theme.fields.color-field.opacity-width,
+        swatch-size: Theme.fields.color-field.swatch-size,
         swatch-border: Theme.fields.color-field.swatch-border,
     };
 }

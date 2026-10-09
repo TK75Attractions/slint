@@ -571,7 +571,9 @@ fn gen_corelib(
         "LogicalRect",
         "LogicalPoint",
         "LogicalPosition",
+        "LogicalSize",
         "LogicalLength",
+        "MouseEvent",
     ]
     .iter()
     .chain(public_exported_types.iter())
@@ -742,7 +744,7 @@ fn gen_corelib(
             }",
         ),
         (
-            vec!["MouseEvent", "BackendMouseEvent", "TouchPhase"],
+            vec!["BackendMouseEvent", "TouchPhase"],
             "slint_events_internal.h",
             "#include \"private/slint_point.h\"
             #include \"private/slint_builtin_structs_internal.h\"
@@ -1063,10 +1065,11 @@ namespace slint {
         using private_api::Point;
         struct ItemTreeVTable;
         struct ItemVTable;
+        struct SlintContext;
         using types::IntRect;
         using types::Size;
         using types::BackendMouseEvent;
-        using types::MouseEvent;
+        struct MouseEvent;
 
         template<typename T> struct Option;
         // This specialization provides a concrete C++ type for Option types
@@ -1293,6 +1296,7 @@ fn gen_interpreter(
                 using slint::interpreter::ValueType;
                 using slint::interpreter::PropertyDescriptor;
                 using slint::interpreter::Diagnostic;
+                using types::PathValueType;
                 struct LiveReloadingComponentInner;
                 struct Instance;
                 template <typename T> using Box = T*;
